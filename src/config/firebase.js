@@ -10,7 +10,18 @@ let admin = {};
 try {
   // Initialize Firebase Admin SDK
   // Ensure that .env variables are properly loaded and formatted
-  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('ascii'));
+    const app = initializeApp({
+      credential: cert(serviceAccount),
+      storageBucket: `${serviceAccount.project_id}.appspot.com`
+    });
+    db = getFirestore(app, 'default');
+    auth = getAuth(app);
+    storage = getStorage(app);
+    admin = { firestore: () => db, auth: () => auth, storage: () => storage };
+    console.log('Firebase Admin Initialized via Base64');
+  } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
       let privateKey = process.env.FIREBASE_PRIVATE_KEY;
       if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
         privateKey = privateKey.slice(1, -1);
