@@ -105,4 +105,7 @@ router.put('/settings', updateSettings);
 router.post('/settings/upload', upload.single('image'), uploadSettingsImage);
 router.delete('/settings/image', deleteSettingsImage);
 
+// GitHub routes
+router.use('/github', require('./github'));
+
 module.exports = router;
