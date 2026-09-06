@@ -146,8 +146,9 @@ router.post('/sync', async (req, res) => {
 
     res.json({ success: true, message: `Project ${repoName} synced successfully`, projectId });
   } catch (error) {
-    console.error('Error syncing github repo:', error.message);
-    res.status(500).json({ success: false, message: 'Failed to sync repository' });
+    const errorMessage = error.response?.data?.message || error.message;
+    console.error(`Error syncing github repo ${req.body?.repoName}:`, errorMessage);
+    res.status(500).json({ success: false, message: `Failed to sync repository: ${errorMessage}` });
   }
 });
 
