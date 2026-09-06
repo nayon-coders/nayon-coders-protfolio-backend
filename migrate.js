@@ -12,6 +12,9 @@ async function updateDb() {
         if (url.startsWith(OLD_URL_PREFIX)) {
             return url.replace(OLD_URL_PREFIX, NEW_URL_PREFIX);
         }
+        if (url.startsWith('http://nayon-coders-protfolio-backend.onrender.com')) {
+            return url.replace('http://', 'https://');
+        }
         return url;
     };
 
@@ -19,7 +22,7 @@ async function updateDb() {
     const profileDoc = await db.collection('profile').doc('main').get();
     if (profileDoc.exists) {
         const data = profileDoc.data();
-        if (data.profileImage && data.profileImage.startsWith(OLD_URL_PREFIX)) {
+        if (data.profileImage && (data.profileImage.startsWith(OLD_URL_PREFIX) || data.profileImage.startsWith('http://nayon-coders'))) {
             await db.collection('profile').doc('main').update({
                 profileImage: updateUrl(data.profileImage)
             });
@@ -34,20 +37,21 @@ async function updateDb() {
         let needsUpdate = false;
         let updateData = {};
         
-        if (data.thumbnail && data.thumbnail.startsWith(OLD_URL_PREFIX)) {
+        if (data.thumbnail && (data.thumbnail.startsWith(OLD_URL_PREFIX) || data.thumbnail.startsWith('http://nayon-coders'))) {
             updateData.thumbnail = updateUrl(data.thumbnail);
             needsUpdate = true;
         }
         
-        if (data.gallery && Array.isArray(data.gallery)) {
-            const newGallery = data.gallery.map(img => {
-                if (img.url && img.url.startsWith(OLD_URL_PREFIX)) {
+        // Handle images array instead of gallery
+        if (data.images && Array.isArray(data.images)) {
+            const newImages = data.images.map(img => {
+                if (typeof img === 'string' && (img.startsWith(OLD_URL_PREFIX) || img.startsWith('http://nayon-coders'))) {
                     needsUpdate = true;
-                    return { ...img, url: updateUrl(img.url) };
+                    return updateUrl(img);
                 }
                 return img;
             });
-            if (needsUpdate) updateData.gallery = newGallery;
+            if (needsUpdate) updateData.images = newImages;
         }
         
         if (needsUpdate) {

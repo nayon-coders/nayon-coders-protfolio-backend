@@ -6,6 +6,9 @@ const errorMiddleware = require('./middleware/error.middleware');
 
 const app = express();
 
+// Trust proxy for Render/HTTPS headers
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
