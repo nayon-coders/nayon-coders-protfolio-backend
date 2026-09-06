@@ -1,82 +1,79 @@
-const fs = require('fs');
-const path = require('path');
-const { promisify } = require('util');
-const { env } = require('../config/env');
-
-const writeFileAsync = promisify(fs.writeFile);
-const unlinkAsync = promisify(fs.unlink);
-const mkdirAsync = promisify(fs.mkdir);
-
-const UPLOADS_DIR = path.join(__dirname, '../../uploads');
+const { storage } = require('../config/firebase');
 
 /**
- * Ensures a directory exists
- */
-const ensureDir = async (dirPath) => {
-  try {
-    await mkdirAsync(dirPath, { recursive: true });
-  } catch (err) {
-    if (err.code !== 'EEXIST') throw err;
-  }
-};
-
-/**
- * Uploads a file buffer to the local disk
+ * Uploads a file buffer to Firebase Storage
  * @param {Buffer} buffer - File buffer
  * @param {string} relativePath - E.g. 'projects/123/thumbnail_12345.jpg'
- * @param {Object} req - Express request object to construct full URL
+ * @param {Object} req - Express request object (unused for Firebase, kept for signature)
  * @returns {Promise<string>} - The public URL to access the file
  */
 const uploadFileLocally = async (buffer, relativePath, req) => {
-  const fullPath = path.join(UPLOADS_DIR, relativePath);
-  const dir = path.dirname(fullPath);
+  if (!storage) {
+    throw new Error('Firebase Storage is not initialized');
+  }
+  const bucket = storage.bucket();
+  const file = bucket.file(relativePath);
   
-  await ensureDir(dir);
-  await writeFileAsync(fullPath, buffer);
+  await file.save(buffer, {
+    metadata: {
+      contentType: 'auto' // Firebase usually infers it, or we could pass mimetype if we had it
+    }
+  });
   
-  // Try to use BASE_URL from env, if not fallback to request host
-  const baseUrl = env.BASE_URL || (req ? `${req.protocol}://${req.get('host')}` : 'http://localhost:5000');
-  return `${baseUrl}/uploads/${relativePath}`;
+  // Make the file publicly readable
+  await file.makePublic();
+  
+  // Return the public URL format for Firebase Storage
+  return `https://storage.googleapis.com/${bucket.name}/${relativePath}`;
 };
 
 /**
- * Deletes a file from the local disk
+ * Deletes a file from Firebase Storage
  * @param {string} fileUrl - The URL or path of the file
  */
 const deleteFileLocally = async (fileUrl) => {
   try {
-    if (!fileUrl) return;
+    if (!fileUrl || !storage) return;
     
+    // Extract the relative path from the URL
+    // e.g. https://storage.googleapis.com/nayon-coders.appspot.com/profile/profile_image_123.png
     let relativePath = fileUrl;
-    if (fileUrl.includes('/uploads/')) {
-      relativePath = fileUrl.split('/uploads/')[1];
+    if (fileUrl.includes('.com/')) {
+      // Get everything after the bucket name
+      const parts = fileUrl.split('.com/');
+      if (parts.length > 1) {
+        relativePath = parts[1];
+      }
     }
     
     if (!relativePath) return;
 
-    const fullPath = path.join(UPLOADS_DIR, relativePath);
-    if (fs.existsSync(fullPath)) {
-      await unlinkAsync(fullPath);
+    const bucket = storage.bucket();
+    const file = bucket.file(relativePath);
+    
+    const [exists] = await file.exists();
+    if (exists) {
+      await file.delete();
     }
   } catch (err) {
-    console.error('Error deleting file locally:', err);
+    console.error('Error deleting file from Firebase Storage:', err);
   }
 };
 
 /**
- * Deletes an entire folder from the local disk
+ * Deletes an entire folder from Firebase Storage
  * @param {string} relativeDirPath - E.g. 'projects/123'
  */
 const deleteFolderLocally = async (relativeDirPath) => {
   try {
-    if (!relativeDirPath) return;
-    const fullPath = path.join(UPLOADS_DIR, relativeDirPath);
+    if (!relativeDirPath || !storage) return;
     
-    if (fs.existsSync(fullPath)) {
-      fs.rmSync(fullPath, { recursive: true, force: true });
-    }
+    const bucket = storage.bucket();
+    await bucket.deleteFiles({
+      prefix: relativeDirPath
+    });
   } catch (err) {
-    console.error('Error deleting folder locally:', err);
+    console.error('Error deleting folder from Firebase Storage:', err);
   }
 };
 
@@ -84,6 +81,6 @@ module.exports = {
   uploadFileLocally,
   deleteFileLocally,
   deleteFolderLocally,
-  UPLOADS_DIR
+  UPLOADS_DIR: 'firebase_storage'
 };
 
