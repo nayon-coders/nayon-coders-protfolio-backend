@@ -24,6 +24,14 @@ const getGithubUsername = async () => {
   return username;
 };
 
+const getGithubHeaders = () => {
+  const headers = { 'Accept': 'application/vnd.github.v3+json' };
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+  return headers;
+};
+
 // GET all public repositories for the user
 router.get('/repos', async (req, res) => {
   try {
@@ -31,9 +39,7 @@ router.get('/repos', async (req, res) => {
     
     // Fetch repos from GitHub
     const response = await axios.get(`https://api.github.com/users/${username}/repos?sort=updated&per_page=100`, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json'
-      }
+      headers: getGithubHeaders()
     });
 
     const repos = response.data.map(repo => ({
@@ -48,8 +54,9 @@ router.get('/repos', async (req, res) => {
 
     res.json({ success: true, data: repos, username });
   } catch (error) {
-    console.error('Error fetching github repos:', error.message);
-    res.status(500).json({ success: false, message: 'Failed to fetch repositories' });
+    const errorMessage = error.response?.data?.message || error.message;
+    console.error('Error fetching github repos:', errorMessage);
+    res.status(500).json({ success: false, message: `Failed to fetch repositories: ${errorMessage}` });
   }
 });
 
@@ -63,7 +70,7 @@ router.post('/sync', async (req, res) => {
 
     // 1. Fetch repo details
     const repoRes = await axios.get(`https://api.github.com/repos/${username}/${repoName}`, {
-      headers: { 'Accept': 'application/vnd.github.v3+json' }
+      headers: getGithubHeaders()
     });
     const repo = repoRes.data;
 
@@ -71,7 +78,7 @@ router.post('/sync', async (req, res) => {
     let timeline = [];
     try {
       const commitsRes = await axios.get(`https://api.github.com/repos/${username}/${repoName}/commits?per_page=15`, {
-        headers: { 'Accept': 'application/vnd.github.v3+json' }
+        headers: getGithubHeaders()
       });
       
       // Map commits to timeline format (newest first, we can reverse it if we want chronological)
