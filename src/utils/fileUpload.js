@@ -1,79 +1,93 @@
-const { storage } = require('../config/firebase');
+const cloudinary = require('cloudinary').v2;
+const { env } = require('../config/env');
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: env.CLOUDINARY_CLOUD_NAME,
+  api_key: env.CLOUDINARY_API_KEY,
+  api_secret: env.CLOUDINARY_API_SECRET
+});
 
 /**
- * Uploads a file buffer to Firebase Storage
+ * Uploads a file buffer to Cloudinary
  * @param {Buffer} buffer - File buffer
  * @param {string} relativePath - E.g. 'projects/123/thumbnail_12345.jpg'
- * @param {Object} req - Express request object (unused for Firebase, kept for signature)
+ * @param {Object} req - Express request object (unused for Cloudinary, kept for signature)
  * @returns {Promise<string>} - The public URL to access the file
  */
 const uploadFileLocally = async (buffer, relativePath, req) => {
-  if (!storage) {
-    throw new Error('Firebase Storage is not initialized');
-  }
-  const bucket = storage.bucket();
-  const file = bucket.file(relativePath);
-  
-  await file.save(buffer, {
-    metadata: {
-      contentType: 'auto' // Firebase usually infers it, or we could pass mimetype if we had it
-    }
+  return new Promise((resolve, reject) => {
+    // Cloudinary uses public_id without extensions, but we can just pass the path
+    // We strip the extension to keep it clean in Cloudinary
+    const publicId = relativePath.substring(0, relativePath.lastIndexOf('.')) || relativePath;
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { 
+        public_id: publicId,
+        resource_type: 'auto',
+        overwrite: true
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Cloudinary upload error:', error);
+          return reject(error);
+        }
+        resolve(result.secure_url);
+      }
+    );
+
+    // Write the buffer to the stream
+    uploadStream.end(buffer);
   });
-  
-  // Make the file publicly readable
-  await file.makePublic();
-  
-  // Return the public URL format for Firebase Storage
-  return `https://storage.googleapis.com/${bucket.name}/${relativePath}`;
 };
 
 /**
- * Deletes a file from Firebase Storage
+ * Deletes a file from Cloudinary
  * @param {string} fileUrl - The URL or path of the file
  */
 const deleteFileLocally = async (fileUrl) => {
   try {
-    if (!fileUrl || !storage) return;
+    if (!fileUrl) return;
     
-    // Extract the relative path from the URL
-    // e.g. https://storage.googleapis.com/nayon-coders.appspot.com/profile/profile_image_123.png
-    let relativePath = fileUrl;
-    if (fileUrl.includes('.com/')) {
-      // Get everything after the bucket name
-      const parts = fileUrl.split('.com/');
+    // Extract public_id from Cloudinary URL
+    // e.g. https://res.cloudinary.com/nayon-coders/image/upload/v1234567/projects/123/thumbnail_12345.png
+    let publicId = fileUrl;
+    
+    if (fileUrl.includes('cloudinary.com/')) {
+      const parts = fileUrl.split('/upload/');
       if (parts.length > 1) {
-        relativePath = parts[1];
+        // parts[1] looks like "v123456789/projects/123/thumbnail_12345.png"
+        // We need to remove the version (v123...) and the extension (.png)
+        let pathPart = parts[1];
+        if (pathPart.match(/^v[0-9]+\//)) {
+          pathPart = pathPart.replace(/^v[0-9]+\//, '');
+        }
+        
+        // Remove extension
+        publicId = pathPart.substring(0, pathPart.lastIndexOf('.')) || pathPart;
       }
     }
     
-    if (!relativePath) return;
-
-    const bucket = storage.bucket();
-    const file = bucket.file(relativePath);
-    
-    const [exists] = await file.exists();
-    if (exists) {
-      await file.delete();
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId);
     }
   } catch (err) {
-    console.error('Error deleting file from Firebase Storage:', err);
+    console.error('Error deleting file from Cloudinary:', err);
   }
 };
 
 /**
- * Deletes an entire folder from Firebase Storage
+ * Deletes an entire folder from Cloudinary
  * @param {string} relativeDirPath - E.g. 'projects/123'
  */
 const deleteFolderLocally = async (relativeDirPath) => {
   try {
-    if (!relativeDirPath || !storage) return;
+    if (!relativeDirPath) return;
     
-    const bucket = storage.bucket();
-    await bucket.deleteFiles({
-      prefix: relativeDirPath
-    });
+    // Cloudinary allows deleting all resources with a specific prefix
+    await cloudinary.api.delete_resources_by_prefix(relativeDirPath);
   } catch (err) {
-    console.error('Error deleting folder from Firebase Storage:', err);
+    console.error('Error deleting folder from Cloudinary:', err);
   }
 };
 
@@ -81,6 +95,6 @@ module.exports = {
   uploadFileLocally,
   deleteFileLocally,
   deleteFolderLocally,
-  UPLOADS_DIR: 'firebase_storage'
+  UPLOADS_DIR: 'cloudinary_storage'
 };
 
