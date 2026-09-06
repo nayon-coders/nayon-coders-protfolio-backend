@@ -42,6 +42,13 @@ router.get('/repos', async (req, res) => {
       headers: getGithubHeaders()
     });
 
+    // Fetch synced projects from db
+    const projectsSnapshot = await db.collection('projects').where('source', '==', 'github').get();
+    const syncedSlugs = new Set();
+    projectsSnapshot.forEach(doc => {
+      syncedSlugs.add(doc.data().slug);
+    });
+
     const repos = response.data.map(repo => ({
       id: repo.id,
       name: repo.name,
@@ -49,7 +56,8 @@ router.get('/repos', async (req, res) => {
       html_url: repo.html_url,
       language: repo.language,
       stargazers_count: repo.stargazers_count,
-      updated_at: repo.updated_at
+      updated_at: repo.updated_at,
+      isSynced: syncedSlugs.has(repo.name)
     }));
 
     res.json({ success: true, data: repos, username });
@@ -156,6 +164,27 @@ router.post('/sync', async (req, res) => {
     const errorMessage = error.response?.data?.message || error.message;
     console.error(`Error syncing github repo ${req.body?.repoName}:`, errorMessage);
     res.status(500).json({ success: false, message: `Failed to sync repository: ${errorMessage}` });
+  }
+});
+
+// DELETE unsync a repository
+router.delete('/sync/:repoName', async (req, res) => {
+  try {
+    const { repoName } = req.params;
+    if (!repoName) return res.status(400).json({ success: false, message: 'repoName is required' });
+
+    const existingQuery = await db.collection('projects').where('slug', '==', repoName).get();
+    
+    if (existingQuery.empty) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    await db.collection('projects').doc(existingQuery.docs[0].id).delete();
+    
+    res.json({ success: true, message: `Project ${repoName} unsynced and removed successfully` });
+  } catch (error) {
+    console.error(`Error unsyncing github repo ${req.params?.repoName}:`, error.message);
+    res.status(500).json({ success: false, message: 'Failed to unsync repository' });
   }
 });
 
