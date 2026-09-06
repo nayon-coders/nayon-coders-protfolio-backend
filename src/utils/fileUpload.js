@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
+const { env } = require('../config/env');
 
 const writeFileAsync = promisify(fs.writeFile);
 const unlinkAsync = promisify(fs.unlink);
@@ -33,22 +34,19 @@ const uploadFileLocally = async (buffer, relativePath, req) => {
   await ensureDir(dir);
   await writeFileAsync(fullPath, buffer);
   
-  // Construct the absolute public URL
-  const baseUrl = req ? `${req.protocol}://${req.get('host')}` : 'http://localhost:5000';
+  // Try to use BASE_URL from env, if not fallback to request host
+  const baseUrl = env.BASE_URL || (req ? `${req.protocol}://${req.get('host')}` : 'http://localhost:5000');
   return `${baseUrl}/uploads/${relativePath}`;
 };
 
 /**
  * Deletes a file from the local disk
- * @param {string} fileUrl - The URL or path of the file (e.g. '/uploads/projects/123/thumbnail.jpg' or full URL)
+ * @param {string} fileUrl - The URL or path of the file
  */
 const deleteFileLocally = async (fileUrl) => {
   try {
     if (!fileUrl) return;
     
-    // Extract the relative path from the URL
-    // e.g. 'http://localhost:5000/uploads/projects/123/img.jpg' -> 'projects/123/img.jpg'
-    // or '/uploads/projects/123/img.jpg' -> 'projects/123/img.jpg'
     let relativePath = fileUrl;
     if (fileUrl.includes('/uploads/')) {
       relativePath = fileUrl.split('/uploads/')[1];
@@ -88,3 +86,4 @@ module.exports = {
   deleteFolderLocally,
   UPLOADS_DIR
 };
+

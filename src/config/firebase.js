@@ -14,7 +14,7 @@ try {
     const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('ascii'));
     const app = initializeApp({
       credential: cert(serviceAccount),
-      storageBucket: `${serviceAccount.project_id}.appspot.com`
+      storageBucket: env.FIREBASE_STORAGE_BUCKET || `${serviceAccount.project_id}.appspot.com`
     });
     db = getFirestore(app, 'default');
     auth = getAuth(app);
@@ -35,7 +35,7 @@ try {
           privateKey: privateKey,
         }),
       projectId: process.env.FIREBASE_PROJECT_ID,
-      storageBucket: `${process.env.FIREBASE_PROJECT_ID}.appspot.com` // Default storage bucket pattern
+      storageBucket: env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`
     });
 
     db = getFirestore(app, 'default');
